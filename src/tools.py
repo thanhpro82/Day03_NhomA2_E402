@@ -5,59 +5,8 @@ Nơi khai báo các công cụ ghép đôi, phân tích tương thích và mô p
 
 import json
 
-# Database giả lập thông tin người dùng (Mock Database)
-MOCK_USER_PROFILES = {
-    "nam": {
-        "name": "Nam",
-        "age": 24,
-        "mbti": "ENFP",
-        "hobbies": ["du lịch", "nhiếp ảnh", "cà phê phượt", "mèo"],
-        "lifestyle": "Thức khuya, hướng ngoại, thích phiêu lưu",
-        "values": "Coi trọng tự do, sáng tạo, sống cảm xúc",
-        "dealbreakers": ["hút thuốc", "kiểm soát quá đà"],
-        "location": "Hà Nội"
-    },
-    "linh": {
-        "name": "Linh",
-        "age": 23,
-        "mbti": "INFJ",
-        "hobbies": ["đọc sách", "vẽ tranh", "mèo", "cà phê yên tĩnh"],
-        "lifestyle": "Dậy sớm, hướng nội, thích không gian yên tĩnh",
-        "values": "Sâu sắc, thấu hiểu, chân thành, gia đình",
-        "dealbreakers": ["ồn ào bừa bãi", "dối tráo"],
-        "location": "Hà Nội"
-    },
-    "minh": {
-        "name": "Minh",
-        "age": 26,
-        "mbti": "ESTJ",
-        "hobbies": ["chơi chứng khoán", "gym", "chạy bộ", "công nghệ"],
-        "lifestyle": "Kỷ luật, thích lập kế hoạch, ngăn nắp",
-        "values": "Sự nghiệp, thực tế, đúng giờ, tham vọng",
-        "dealbreakers": ["thức khuya lười biếng", "hút thuốc"],
-        "location": "TP.HCM"
-    },
-    "trang": {
-        "name": "Trang",
-        "age": 22,
-        "mbti": "ENFP",
-        "hobbies": ["đi đu concert", "du lịch", "ăn uống", "chó cảnh"],
-        "lifestyle": "Sôi nổi, hướng ngoại, ngẫu hứng",
-        "values": "Vui vẻ, trải nghiệm mới, bạn bè",
-        "dealbreakers": ["gia trưởng", "quá nghiêm túc"],
-        "location": "Hà Nội"
-    }
-}
-
-# Ma trận độ hợp MBTI cơ bản
-MBTI_COMPATIBILITY_MATRIX = {
-    ("ENFP", "INFJ"): 95,
-    ("ENFP", "ENFP"): 85,
-    ("ENFP", "ESTJ"): 45,
-    ("INFJ", "ESTJ"): 50,
-    ("INFJ", "INFJ"): 88,
-    ("ESTJ", "ESTJ"): 75
-}
+# Import dữ liệu từ file data.py (tách riêng cho Role 1: Data & Test Case Designer)
+from data import MOCK_USER_PROFILES, MBTI_COMPATIBILITY_MATRIX, LOVE_LANGUAGE_COMPATIBILITY
 
 def get_user_profile(user_name: str) -> str:
     """
