@@ -4,17 +4,14 @@
 
 ---
 
-## 👥 1. BẢNG PHÂN VAI & FILE ĐẢM NHẬN
+## 👥 1. BẢNG PHÂN VAI & FILE ĐẢM NHẬN (CUPID AGENT)
 
-| Vai trò (Role)                               | File đảm nhận           | Nhiệm vụ chính                                                                                          | Người đảm nhận  |
-| :-------------------------------------------- | :------------------------- | :--------------------------------------------------------------------------------------------------------- | :------------------- |
-| **Role 1: Product Architect**           | `config/test_cases.json` | Định hướng bài toán & soạn bộ câu test case                                                       | `________________` |
-| **Role 2: Tool Engineer**               | `src/tools.py`           | Định nghĩa các công cụ (Tools) cho Agent                                                             | `________________` |
-| **Role 3: Prompt Engineer**             | `src/prompts.py`         | Viết ReAct System Prompt & phanh Guardrails                                                               | `________________` |
-| **Role 4: Core Developer / Integrator** | `src/app.py`             | **Đầu mối kéo code/file của nhóm (`git pull`), Vibe Code lắp ráp thành App hoàn chỉnh** | `________________` |
-| **Role 5: Observability**               | `docs/trace_eval.md`     | Lập bảng Scoring Matrix & Soi nhật ký Trace Log                                                        | `________________` |
-
-*Note: Nếu nhóm 6 người, Role 5 tách thành 5A (Trace Analyst) và 5B (Flowchart Architect).*
+| Vai trò (Role) | File đảm nhận | Nhiệm vụ chính | Người đảm nhận |
+| :--- | :--- | :--- | :--- |
+| **Role 1: Product Architect & Role 5: Observability** | `config/test_cases.json`<br>`docs/trace_eval.md` | Định hướng bài toán Cupid Agent, soạn bộ test case (5-10 cặp profile), lập bảng Scoring Matrix & soi nhật ký Trace Log đánh giá chất lượng Agent. | Nguyễn Tuấn Thành - 2A202601967 (Leader/QA) |
+| **Role 2: Tool Engineer** | `src/tools.py` | Định nghĩa các công cụ (Tools) cho Agent (tính % tương thích, trích xuất Red/Green Flags, mô phỏng đoạn chat). | Trần Minh Hiền |
+| **Role 3: Prompt Engineer** | `src/prompts.py` | Viết ReAct System Prompt (định hình cá tính "Cupid xéo xắt") & phanh Guardrails (chặn toxic, thông tin nhạy cảm). | Nguyễn Ngọc Gia Bảo - 2A202601234 |
+| **Role 4: Core Developer / Integrator** | `src/app.py` | Đầu mối kéo code/file của nhóm (`git pull`), Vibe Code lắp ráp thành App hoàn chỉnh (Dựng UI Streamlit/Gradio & kết nối ReAct Agent). | Trần Quí Đôn - 2A202601052 |
 
 > 🌟 **VAI TRÒ NÒNG NỐT CỦA ROLE 4 (ĐẦU MỐI LẮP RÁP APP HOÀN CHỈNH)**:
 >
