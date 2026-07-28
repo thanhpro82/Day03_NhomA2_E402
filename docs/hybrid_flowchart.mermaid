@@ -1,0 +1,45 @@
+```mermaid
+graph TD
+    A["👤 User Input Request"] --> B{"🛡️ Guardrail Check<br/>(validate_input)"}
+    
+    %% Input Guardrail Branch
+    B -- "❌ Vi phạm từ khóa cấm<br/>(quấy rối, theo dõi...)" --> C["🚫 Trigger Safety Guardrail<br/>Trả về cảnh báo an toàn"]
+    
+    %% Valid Input Branch
+    B -- "✅ Yêu cầu hợp lệ" --> D{"🤔 Phân loại Yêu cầu & Độ phức tạp"}
+    
+    %% Chatbot Path (Simple Query)
+    D -- "🟢 Câu hỏi Đơn giản / Lý thuyết<br/>(Mẹo hẹn hò, kiến thức MBTI chung)" --> E["💬 Chatbot Baseline Path<br/>(LLM Trả lời trực tiếp)"]
+    E --> F["🏁 Trả lời tư vấn trực tiếp"]
+    
+    %% ReAct Agent Path (Complex Query)
+    D -- "🟡 Câu hỏi Phức tạp / Tra cứu<br/>(Hồ sơ, Tính % hợp, Red/Green Flags, Icebreaker)" --> G["🧠 ReAct Agent Loop<br/>(System Prompt: Cupid Agent)"]
+    
+    subgraph ReAct_Loop ["🔄 Vòng lặp ReAct Iterative Execution (Max 5 Iterations)"]
+        G --> H["💭 Step 1: Thought & Action Decision"]
+        H --> I{"🛠️ Thực thi Cupid Tool"}
+        
+        I -->|"get_user_profile"| J1["📋 Tra cứu hồ sơ người dùng"]
+        I -->|"calculate_compatibility_score"| J2["📊 Tính % độ tương thích"]
+        I -->|"extract_red_green_flags"| J3["🟢/🚩 Trích xuất Green & Red Flags"]
+        I -->|"simulate_date_chat"| J4["🎭 Mô phỏng kịch bản hẹn hò"]
+        
+        J1 --> K["👁️ Observation: Kết quả từ Tool"]
+        J2 --> K
+        J3 --> K
+        J4 --> K
+        
+        K --> L{"🔍 Đánh giá kết quả"}
+        L -- "Cần thêm thông tin" --> H
+        L -- "Đã đủ thông tin / Final Answer" --> M["🏁 Tổng hợp báo cáo ghép đôi Cupid"]
+    end
+    
+    %% Max Iteration Safeguard
+    ReAct_Loop -- "⚠️ Vượt quá 5 vòng lặp" --> N["🛡️ Trigger Max Iterations Guardrail<br/>Ngắt lặp an toàn"]
+    
+    %% Outputs
+    F --> O["📤 Gửi phản hồi cho Người dùng"]
+    M --> O
+    N --> O
+    C --> O
+```
