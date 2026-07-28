@@ -1,512 +1,602 @@
 """
-🚀 CORE AGENT APP — CUPID AGENT 💘 (Dành cho Role 4: Core Agent Developer & Integrator)
-Ghép nối toàn bộ: Tools + Prompts + Test Cases + Multi-Provider Adapter + Guardrails.
-Hỗ trợ cả 2 chế độ:
-  1. Web Streamlit Glassmorphic UI (Chạy qua `streamlit run src/app.py`)
-  2. Terminal CLI Fallback Mode (Chạy qua `python3 src/app.py`)
+🚀 CUPID AGENT — WEB APPLICATION 💘
+Giao diện Cao cấp với hỗ trợ Giao diện Sáng (Warm Light Theme) và Giao diện Tối (Dark Theme).
 """
 
-import json
 import os
 import sys
-import re
-from dotenv import load_dotenv
+import json
+import streamlit as st
 
-# Đảm bảo import các module cùng thư mục src/
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Ensure src modules are in python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Đảm bảo in ra Tiếng Việt và Emojis không bị lỗi trên Windows Console
-if sys.stdout.encoding != 'utf-8':
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except Exception:
-        pass
+from src.database.connection import SessionLocal, init_db
+from src.database.seed import seed_database
+from src.database.models import User, Conversation, Message, MemoryCandidate, ApprovedMemory, MatchResult, AuditLog
+from src.services.auth_service import AuthService
+from src.services.conversation_service import ConversationService
+from src.services.memory_service import MemoryService
+from src.services.profile_service import ProfileService
+from src.services.matching_engine import MatchingEngine
+from src.services.explanation_service import ExplanationService
+from src.config import SUGGESTED_CHAT_PROMPTS, CATEGORY_LABELS_VI, VISIBILITY_OPTIONS
 
-# Import các thành phần từ file của Role 2, Role 3 & Multi-Provider Adapter
-from tools import (
-    AVAILABLE_TOOLS,
-    MOCK_USER_PROFILES,
-    get_user_profile,
-    calculate_compatibility_score,
-    extract_red_green_flags,
-    simulate_date_chat
+
+# ------------------------------------------------------------------------------
+# 1. INITIALIZATION & SESSION STATE MANAGEMENT
+# ------------------------------------------------------------------------------
+st.set_page_config(
+    page_title="Cupid Agent 💘 Trợ lý ghép đôi & Thấu hiểu",
+    page_icon="💘",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
-from prompts import (
-    CHATBOT_BASELINE_PROMPT,
-    REACT_SYSTEM_PROMPT,
-    MAX_ITERATIONS,
-    validate_input,
-)
-from providers import get_llm_provider, MockProvider
 
-load_dotenv()
+# Initialize Database & Seed Candidates
+init_db()
 
+@st.cache_resource
+def run_once_seed():
+    seed_database()
 
-def load_test_cases():
-    """Đọc bộ test cases từ config/test_cases.json của Role 1"""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    config_path = os.path.join(base_dir, "config", "test_cases.json")
-    
-    if not os.path.exists(config_path):
-        config_path = "test_cases.json"
-        
-    if os.path.exists(config_path):
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+run_once_seed()
 
-
-def run_baseline_chatbot(user_query: str, provider):
-    """Dựng Chatbot gốc (Baseline) không có công cụ cho CLI."""
-    print(f"\n💬 [CHATBOT BASELINE] Câu hỏi: {user_query}")
-    print(f"⚙️ System Prompt: {CHATBOT_BASELINE_PROMPT.strip()}")
-    
-    # Check Guardrail trước khi gọi LLM
-    guard_err = validate_input(user_query)
-    if guard_err:
-        print(guard_err)
-        return guard_err
-        
-    response = provider.generate(user_query, system_prompt=CHATBOT_BASELINE_PROMPT)
-    print(f"🤖 Chatbot trả lời:\n{response}")
-    return response
+# Initialize Session State
+if "user_id" not in st.session_state:
+    st.session_state.user_id = "user_demo_01"  # Default Active Session cho phép test ngay
+if "user_email" not in st.session_state:
+    st.session_state.user_email = "demo@cupid.ai"
+if "display_name" not in st.session_state:
+    st.session_state.display_name = "Người dùng Demo"
+if "current_conversation_id" not in st.session_state:
+    st.session_state.current_conversation_id = None
+if "selected_nav" not in st.session_state:
+    st.session_state.selected_nav = "💬 Cupid Chat"
+if "theme" not in st.session_state:
+    st.session_state.theme = "light"  # Mặc định là Warm Light Theme
 
 
-def parse_action(text: str):
-    """
-    Trích xuất tên tool và tham số từ chuỗi 'Action: tool_name[arg1, arg2]'
-    """
-    match = re.search(r"Action:\s*([a-zA-Z0-9_]+)\[(.*?)\]", text, re.IGNORECASE)
-    if match:
-        tool_name = match.group(1).strip()
-        raw_args = match.group(2).strip()
-        args = [a.strip().strip("'\"") for a in raw_args.split(",") if a.strip()]
-        return tool_name, args
-    return None, []
+# ------------------------------------------------------------------------------
+# 2. CUSTOM CSS STYLING (Light & Dark Theme Engine)
+# ------------------------------------------------------------------------------
+is_dark = (st.session_state.theme == "dark")
+
+if is_dark:
+    bg_app = "#0B0C10"
+    text_color = "#E0E6ED"
+    bg_card = "rgba(255, 255, 255, 0.04)"
+    border_card = "rgba(255, 51, 102, 0.3)"
+    agent_bubble = "rgba(255, 51, 102, 0.15)"
+    user_bubble = "rgba(139, 92, 246, 0.18)"
+    agent_text = "#FCE7F3"
+    user_text = "#F3E8FF"
+    badge_bg = "rgba(255, 255, 255, 0.1)"
+    sidebar_bg = "#12141C"
+else:
+    bg_app = "#FFF9FA"
+    text_color = "#1E293B"
+    bg_card = "#FFFFFF"
+    border_card = "rgba(255, 51, 102, 0.25)"
+    agent_bubble = "#FFF0F4"
+    user_bubble = "#F3E8FF"
+    agent_text = "#1E293B"
+    user_text = "#1E293B"
+    badge_bg = "rgba(255, 51, 102, 0.08)"
+    sidebar_bg = "#FAF0F3"
+
+st.markdown(f"""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+    html, body, [class*="css"] {{
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }}
+
+    .stApp {{
+        background-color: {bg_app};
+        color: {text_color};
+    }}
+
+    [data-testid="stSidebar"] {{
+        background-color: {sidebar_bg};
+    }}
+
+    /* Card Styling */
+    .cupid-card {{
+        background: {bg_card};
+        border: 1px solid {border_card};
+        border-radius: 16px;
+        padding: 22px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 20px 0 rgba(255, 51, 102, 0.08);
+    }}
+
+    .cupid-title {{
+        background: linear-gradient(135deg, #FF3366 0%, #FF6B8B 50%, #E11D48 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        font-size: 2.2rem;
+        margin-bottom: 4px;
+    }}
+
+    /* Badges */
+    .badge-visibility {{
+        background: linear-gradient(135deg, #8B5CF6, #EC4899);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        display: inline-block;
+    }}
+
+    .badge-confidence {{
+        background: rgba(16, 185, 129, 0.15);
+        color: #059669;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        padding: 3px 8px;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }}
+
+    .badge-category {{
+        background: {badge_bg};
+        color: #0284C7;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }}
+
+    /* Chat Messages */
+    .chat-bubble-agent {{
+        background: {agent_bubble};
+        border: 1px solid rgba(255, 51, 102, 0.3);
+        border-radius: 16px 16px 16px 4px;
+        padding: 16px 20px;
+        margin-bottom: 14px;
+        color: {agent_text};
+        line-height: 1.6;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }}
+
+    .chat-bubble-user {{
+        background: {user_bubble};
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        border-radius: 16px 16px 4px 16px;
+        padding: 16px 20px;
+        margin-bottom: 14px;
+        color: {user_text};
+        line-height: 1.6;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }}
+
+    /* Score Circle */
+    .score-badge {{
+        font-size: 1.8rem;
+        font-weight: 800;
+        color: #FF3366;
+    }}
+
+    /* Buttons readability */
+    .stButton button {{
+        border-radius: 10px;
+        font-weight: 600;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
 
-def run_react_agent(user_query: str, provider):
-    """
-    Dựng vòng lặp ReAct Agent (Thought -> Action -> Observation) thực tế có Guardrails.
-    """
-    print(f"\n🤖 [REACT AGENT] Câu hỏi: {user_query}")
-    
-    # 1. Input Guardrail check
-    guard_err = validate_input(user_query)
-    if guard_err:
-        print(f"{guard_err}")
-        return
+# ------------------------------------------------------------------------------
+# 3. SIDEBAR NAVIGATION & AUTH CONTEXT
+# ------------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown('<div class="cupid-title">💘 Cupid Agent</div>', unsafe_allow_html=True)
+    st.caption("Trợ lý trò chuyện, hiểu người dùng & gợi ý đối tượng phù hợp")
+    st.divider()
 
-    # Nếu chạy ở Offline MockProvider
-    if isinstance(provider, MockProvider):
-        print("ℹ️ [Mock Provider Mode]: Giả lập luồng ReAct cho Cupid Agent...")
-        run_mock_react_demo(user_query)
-        return
+    # User Account Status Indicator
+    st.write(f"👤 **Tài khoản:** {st.session_state.display_name}")
+    st.caption(f"📧 {st.session_state.user_email}")
 
-    current_prompt = f"Câu hỏi của người dùng: {user_query}"
-    history = ""
-    step = 0
+    if st.button("🚪 Đăng xuất", use_container_width=True):
+        st.session_state.user_id = "user_demo_01"
+        st.session_state.user_email = "demo@cupid.ai"
+        st.session_state.display_name = "Người dùng Demo"
+        st.session_state.current_conversation_id = None
+        st.rerun()
 
-    while step < MAX_ITERATIONS:
-        step += 1
-        print(f"\n--- 🔄 Vòng lặp ReAct (Step {step}/{MAX_ITERATIONS}) ---")
-        
-        full_prompt = history + "\n" + current_prompt if history else current_prompt
-        response = provider.generate(full_prompt, system_prompt=REACT_SYSTEM_PROMPT)
-        print(f"🤖 Agent Response:\n{response}")
+    st.divider()
 
-        if "Final Answer:" in response:
-            print("\n✅ ReAct Agent đã hoàn thành nhiệm vụ.")
-            return
-
-        tool_name, args = parse_action(response)
-        if tool_name:
-            print(f"🛠️ Tool được gọi: {tool_name} với tham số: {args}")
-            if tool_name in AVAILABLE_TOOLS:
-                tool_func = AVAILABLE_TOOLS[tool_name]
-                try:
-                    obs = tool_func(*args)
-                except Exception as e:
-                    obs = f"LỖI khi thực thi tool '{tool_name}': {str(e)}"
-            else:
-                available_str = ", ".join(AVAILABLE_TOOLS.keys())
-                obs = f"LỖI: Không tìm thấy công cụ '{tool_name}'. Các công cụ khả dụng: {available_str}"
-            
-            print(f"👁️ Observation:\n{obs}")
-            history += f"\n{response}\nObservation: {obs}"
-            current_prompt = "Hãy tiếp tục suy luận (Thought) hoặc đưa ra câu trả lời cuối cùng (Final Answer)."
-        else:
-            history += f"\n{response}"
-            current_prompt = "LƯU Ý: Vui lòng đưa ra 'Action: tên_công_cụ[tham_số]' hoặc 'Final Answer: câu_trả_lời' theo đúng định dạng."
-
-    if step >= MAX_ITERATIONS:
-        print(f"\n🛡️ GUARDRAIL TRIGGERED: Đã đạt giới hạn tối đa {MAX_ITERATIONS} bước. Ngắt lặp an toàn!")
-
-
-def run_mock_react_demo(user_query: str):
-    """Demo luồng ReAct cho chế độ Offline Mock"""
-    q_lower = user_query.lower()
-    if "hồ sơ" in q_lower or "tương thích" in q_lower or "nam" in q_lower:
-        print("\n--- 🔄 Vòng lặp ReAct (Step 1/3) ---")
-        print("🧠 Thought: Người dùng muốn tra cứu hồ sơ và tính độ tương thích giữa Nam và Linh. Tôi cần dùng tool calculate_compatibility_score.")
-        print("🛠️ Action: calculate_compatibility_score[Nam, Linh]")
-        obs = AVAILABLE_TOOLS["calculate_compatibility_score"]("Nam", "Linh")
-        print(f"👁️ Observation:\n{obs}")
-        
-        print("\n--- 🔄 Vòng lặp ReAct (Step 2/3) ---")
-        print("🧠 Thought: Tôi cần trích xuất Red/Green Flags để phân tích sâu hơn.")
-        print("🛠️ Action: extract_red_green_flags[Nam, Linh]")
-        obs_flags = AVAILABLE_TOOLS["extract_red_green_flags"]("Nam", "Linh")
-        print(f"👁️ Observation:\n{obs_flags}")
-
-        print("\n--- 🔄 Vòng lặp ReAct (Step 3/3) ---")
-        print("🧠 Thought: Tôi đã có đầy đủ chỉ số tương thích và Red/Green Flags. Giờ tôi tổng hợp câu trả lời cuối cùng.")
-        print("🏁 Final Answer: Nam (ENFP) và Linh (INFJ) có chỉ số tương thích ấn tượng 87%! Cặp đôi hợp nhau về MBTI (95%), cùng ở Hà Nội và cùng thích mèo, cà phê. Cảnh báo rủi ro: Lệch nhịp sinh học.")
-    else:
-        print("\n--- 🔄 Vòng lặp ReAct (Step 1/3) ---")
-        print("🧠 Thought: Đây là câu hỏi tư vấn chung, không cần tra cứu hồ sơ.")
-        print("🏁 Final Answer: [Mock Mode] Trả lời trực tiếp câu hỏi của bạn.")
-
-
-# ==============================================================================
-# STREAMLIT WEB UI IMPLEMENTATION (Option A: Cupid Dark Glassmorphism)
-# ==============================================================================
-
-def is_streamlit_running():
-    """Kiểm tra xem ứng dụng đang chạy qua Streamlit CLI hay Python trực tiếp."""
-    try:
-        from streamlit.runtime.scriptrunner import get_script_run_ctx
-        return get_script_run_ctx() is not None
-    except Exception:
-        return False
-
-
-def run_streamlit_app():
-    import streamlit as st
-
-    # Cấu hình trang Streamlit
-    st.set_page_config(
-        page_title="Cupid Agent 💘 Matchmaking Assistant",
-        page_icon="💘",
-        layout="wide",
-        initial_sidebar_state="expanded"
+    # Theme Switcher (Chuyển đổi Sáng / Tối)
+    theme_choice = st.selectbox(
+        "🎨 Giao diện (Theme):",
+        ["🌸 Soft Light (Giao diện Sáng)", "🌙 Dark Glass (Giao diện Tối)"],
+        index=0 if st.session_state.theme == "light" else 1
     )
+    new_theme_val = "light" if "Light" in theme_choice else "dark"
+    if new_theme_val != st.session_state.theme:
+        st.session_state.theme = new_theme_val
+        st.rerun()
 
-    # Inject Cupid Custom CSS (Rose Gold & Dark Glassmorphism Theme)
-    st.markdown("""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    st.divider()
 
-        html, body, [class*="css"] {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-        }
+    # Main Navigation Radio
+    nav_options = [
+        "💬 Cupid Chat",
+        "🧠 Duyệt Memory",
+        "📋 Cupid hiểu gì về bạn",
+        "💘 Tìm người phù hợp",
+        "🛡️ Quyền riêng tư & Audit",
+        "🔐 Đăng nhập / Đăng ký"
+    ]
 
-        .stApp {
-            background-color: #0B0C10;
-            color: #E0E6ED;
-        }
+    selected_page = st.radio("Chuyển trang navigation:", nav_options, index=nav_options.index(st.session_state.selected_nav))
+    st.session_state.selected_nav = selected_page
 
-        /* Glassmorphism Card Styling */
-        .cupid-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 51, 102, 0.25);
-            border-radius: 16px;
-            padding: 20px;
-            backdrop-filter: blur(12px);
-            margin-bottom: 16px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        }
+    st.divider()
+    st.caption("🔒 Privacy & Consent First Architecture")
+    st.caption("⚡ Powered by Rule-based Matching Engine")
 
-        .cupid-title {
-            background: linear-gradient(135deg, #FF3366 0%, #FF6B8B 50%, #FFA07A 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 800;
-            font-size: 2.2rem;
-            margin-bottom: 0px;
-        }
 
-        /* Badges & Flags */
-        .badge-mbti {
-            background: linear-gradient(135deg, #8B5CF6, #EC4899);
-            color: white;
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
+# Database Helper
+db = SessionLocal()
 
-        .badge-location {
-            background: rgba(255, 255, 255, 0.1);
-            color: #38BDF8;
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-        }
 
-        .flag-green {
-            color: #10B981;
-            background: rgba(16, 185, 129, 0.08);
-            border-left: 4px solid #10B981;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-        }
+# ------------------------------------------------------------------------------
+# PAGE 1: 💬 CUPID CHAT
+# ------------------------------------------------------------------------------
+if st.session_state.selected_nav == "💬 Cupid Chat":
+    st.markdown("## 💬 Trò chuyện cùng Cupid Agent")
+    st.caption("Hãy thoải mái chia sẻ về phong cách sống, cảm xúc và điều bạn kỳ vọng trong tình cảm. Cupid luôn lắng nghe mà không phán xét.")
 
-        .flag-red {
-            color: #EF4444;
-            background: rgba(239, 68, 68, 0.08);
-            border-left: 4px solid #EF4444;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-        }
+    col_side, col_main = st.columns([1, 3])
 
-        .chat-bubble-a {
-            background: rgba(255, 51, 102, 0.15);
-            border: 1px solid rgba(255, 51, 102, 0.3);
-            border-radius: 14px 14px 14px 2px;
-            padding: 12px 16px;
-            margin-bottom: 10px;
-            max-width: 85%;
-        }
+    with col_side:
+        st.subheader("📜 Phiên gần đây")
+        if st.button("➕ Cuộc trò chuyện mới", type="primary", use_container_width=True):
+            new_conv = ConversationService.get_or_create_conversation(db, st.session_state.user_id)
+            st.session_state.current_conversation_id = new_conv.id
+            st.rerun()
 
-        .chat-bubble-b {
-            background: rgba(139, 92, 246, 0.15);
-            border: 1px solid rgba(139, 92, 246, 0.3);
-            border-radius: 14px 14px 2px 14px;
-            padding: 12px 16px;
-            margin-bottom: 10px;
-            margin-left: auto;
-            max-width: 85%;
-            text-align: right;
-        }
+        conversations = ConversationService.list_user_conversations(db, st.session_state.user_id)
+        if not conversations:
+            new_conv = ConversationService.get_or_create_conversation(db, st.session_state.user_id)
+            st.session_state.current_conversation_id = new_conv.id
+            conversations = [new_conv]
 
-        /* Metric Gauge Ring */
-        .score-circle {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: radial-gradient(closest-side, #0B0C10 79%, transparent 80% 100%),
-                        conic-gradient(#FF3366 calc(var(--score) * 1%), rgba(255,255,255,0.1) 0);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 10px auto;
-        }
+        if not st.session_state.current_conversation_id and conversations:
+            st.session_state.current_conversation_id = conversations[0].id
 
-        .score-number {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: #FF3366;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+        for conv in conversations:
+            is_active = (conv.id == st.session_state.current_conversation_id)
+            btn_label = f"{'🟢' if is_active else '💬'} {conv.title[:20]}"
+            if st.button(btn_label, key=f"conv_{conv.id}", use_container_width=True):
+                st.session_state.current_conversation_id = conv.id
+                st.rerun()
 
-    # Initialize Provider
-    provider = get_llm_provider()
-    provider_name = provider.__class__.__name__
-    model_name = getattr(provider, "model_name", "Offline Mock Mode")
+    with col_main:
+        active_conv_id = st.session_state.current_conversation_id
+        if active_conv_id:
+            messages = ConversationService.get_messages(db, st.session_state.user_id, active_conv_id)
 
-    # ==================== SIDEBAR ====================
-    with st.sidebar:
-        st.markdown("<h2 class='cupid-title'>💘 Cupid Agent</h2>", unsafe_allow_html=True)
-        st.caption("Trợ lý AI Ghép Đôi & Phân Tích Độ Tương Thích")
+            # Container hiển thị tin nhắn
+            chat_container = st.container()
+            with chat_container:
+                for m in messages:
+                    if m.sender_type == "agent":
+                        st.markdown(f'<div class="chat-bubble-agent"><b>💘 Cupid:</b><br>{m.content}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="chat-bubble-user"><b>👤 Bạn:</b><br>{m.content}</div>', unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.markdown(f"**🔌 Active Provider:** `{provider_name}`")
-        st.markdown(f"**🧠 Model:** `{model_name}`")
-        st.markdown(f"**🛡️ Max Iterations:** `{MAX_ITERATIONS} steps`")
-        st.markdown("---")
+            st.divider()
 
-        st.subheader("👥 Database Hồ Sơ Mẫu")
-        city_filter = st.selectbox("Lọc theo Thành Phố:", ["Tất cả", "Hà Nội", "TP.HCM", "Đà Nẵng", "Huế", "Cần Thơ"])
-        
-        profiles = list(MOCK_USER_PROFILES.values())
-        if city_filter != "Tất cả":
-            profiles = [p for p in profiles if p.get("location") == city_filter]
+            # Gợi ý câu hỏi khi người dùng chưa biết nói gì
+            st.caption("💡 **Gợi ý câu hỏi để khởi đầu tâm sự:**")
+            p_cols = st.columns(len(SUGGESTED_CHAT_PROMPTS))
+            for idx, prompt_text in enumerate(SUGGESTED_CHAT_PROMPTS):
+                with p_cols[idx]:
+                    if st.button(prompt_text, key=f"sug_{idx}", use_container_width=True):
+                        with st.spinner("Cupid đang lắng nghe và suy ngẫm..."):
+                            ConversationService.send_message(db, st.session_state.user_id, active_conv_id, prompt_text)
+                        st.rerun()
 
-        profile_names = [p["name"] for p in profiles]
-        selected_user = st.selectbox("Xem chi tiết hồ sơ:", profile_names)
+            # Ô nhập nội dung tin nhắn
+            user_input = st.chat_input("Nhập tâm sự hoặc câu hỏi của bạn với Cupid...")
+            if user_input:
+                with st.spinner("Cupid đang soạn phản hồi..."):
+                    ConversationService.send_message(db, st.session_state.user_id, active_conv_id, user_input)
+                st.rerun()
 
-        if selected_user:
-            prof = MOCK_USER_PROFILES[selected_user.lower()]
+            st.divider()
+            col_actions, _ = st.columns([2, 2])
+            with col_actions:
+                if st.button("🧠 Trích xuất Memory từ cuộc trò chuyện", use_container_width=True):
+                    with st.spinner("Hệ thống đang phân tích các memory candidate..."):
+                        extracted = MemoryService.extract_memories_from_conversation(db, st.session_state.user_id, active_conv_id)
+                        if extracted:
+                            st.success(f"Đã trích xuất {len(extracted)} memory candidates! Vui lòng sang tab 'Duyệt Memory' để phân quyền.")
+                        else:
+                            st.info("Chưa tìm thấy thuộc tính mới cần lưu.")
+
+
+# ------------------------------------------------------------------------------
+# PAGE 2: 🧠 DUYỆT MEMORY & CONSENT
+# ------------------------------------------------------------------------------
+elif st.session_state.selected_nav == "🧠 Duyệt Memory":
+    st.markdown("## 🧠 Duyệt Memory Candidates & Phân quyền Consent")
+    st.caption("Sau mỗi cuộc trò chuyện, Cupid đề xuất những thuộc tính có thể ghi nhớ. **Bạn là người hoàn toàn quyết định** thông tin nào được lưu và sử dụng vào mục đích gì.")
+
+    pending_list = MemoryService.get_pending_candidates(db, st.session_state.user_id)
+
+    if not pending_list:
+        st.info("🎉 Bạn không có memory candidate nào đang chờ duyệt. Hãy trò chuyện thêm với Cupid và nhấn 'Trích xuất Memory' nhé!")
+    else:
+        st.write(f"📋 **Có {len(pending_list)} đề xuất ghi nhớ cần bạn duyệt:**")
+
+        for idx, candidate in enumerate(pending_list):
+            with st.container():
+                st.markdown(f"""
+                <div class="cupid-card">
+                    <h4>{CATEGORY_LABELS_VI.get(candidate.category, candidate.category)}</h4>
+                    <p><b>Nội dung trích xuất:</b> <i>"{candidate.human_readable_value}"</i></p>
+                    <p><span class="badge-confidence">Độ tin cậy: {int(candidate.confidence * 100)}%</span> | <span class="badge-category">Stability: {candidate.stability}</span></p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    if st.button("🔒 Chat riêng tư (PRIVATE_ONLY)", key=f"priv_{candidate.id}", use_container_width=True):
+                        MemoryService.process_consent_decision(db, st.session_state.user_id, candidate.id, "PRIVATE_ONLY")
+                        st.toast("Đã lưu memory vào chế độ Chat riêng tư!")
+                        st.rerun()
+                    st.caption("Chỉ Cupid dùng khi trò chuyện với bạn.")
+
+                with col2:
+                    if st.button("💘 Tính tương thích (MATCH_USE)", key=f"match_{candidate.id}", use_container_width=True):
+                        MemoryService.process_consent_decision(db, st.session_state.user_id, candidate.id, "MATCH_USE")
+                        st.toast("Đã duyệt memory cho Matching Engine!")
+                        st.rerun()
+                    st.caption("Dùng tính hợp, không hiện nguyên văn.")
+
+                with col3:
+                    if st.button("🌐 Hiển thị bài giới thiệu (SHAREABLE)", key=f"share_{candidate.id}", use_container_width=True):
+                        MemoryService.process_consent_decision(db, st.session_state.user_id, candidate.id, "SHAREABLE")
+                        st.toast("Đã duyệt memory ở chế độ Công khai ghép đôi!")
+                        st.rerun()
+                    st.caption("Dùng tính hợp & có thể xuất hiện bài giới thiệu.")
+
+                with col4:
+                    if st.button("❌ Không lưu (DO_NOT_SAVE)", key=f"nosave_{candidate.id}", use_container_width=True):
+                        MemoryService.process_consent_decision(db, st.session_state.user_id, candidate.id, "DO_NOT_SAVE")
+                        st.toast("Đã loại bỏ memory!")
+                        st.rerun()
+                    st.caption("Bỏ qua hoàn toàn, không lưu vào DB.")
+
+                st.divider()
+
+
+# ------------------------------------------------------------------------------
+# PAGE 3: 📋 CUPID HIỂU GÌ VỀ BẠN (RELATIONSHIP PROFILE)
+# ------------------------------------------------------------------------------
+elif st.session_state.selected_nav == "📋 Cupid hiểu gì về bạn":
+    st.markdown("## 📋 Trang 'Cupid hiểu gì về bạn'")
+    st.caption("Tổng hợp minh bạch toàn bộ dữ liệu mà Cupid đã thấu hiểu từ bạn. Bạn có thể kiểm tra, đổi quyền sử dụng hoặc đánh dấu Cupid hiểu sai.")
+
+    profile_data = ProfileService.get_user_profile_grouped(db, st.session_state.user_id)
+    grouped = profile_data["grouped_memories"]
+
+    st.write(f"📊 **Tổng số thuộc tính đã lưu:** {profile_data['total_count']}")
+
+    # Form thêm thuộc tính tự chọn
+    with st.expander("➕ Tự thêm thuộc tính mới vào hồ sơ"):
+        with st.form("add_custom_memory_form"):
+            new_cat = st.selectbox("Danh mục:", list(CATEGORY_LABELS_VI.keys()), format_func=lambda x: CATEGORY_LABELS_VI[x])
+            new_val = st.text_input("Nội dung diễn giải (VD: Thích nấu ăn cuối tuần và không thích hút thuốc):")
+            new_vis = st.selectbox("Quyền sử dụng:", ["MATCH_USE", "SHAREABLE", "PRIVATE_ONLY"])
+            submit_add = st.form_submit_button("Thêm vào hồ sơ")
+            if submit_add and new_val:
+                ProfileService.add_custom_memory(db, st.session_state.user_id, new_cat, new_val, new_vis)
+                st.success("Đã thêm thuộc tính mới thành công!")
+                st.rerun()
+
+    st.divider()
+
+    # Hiển thị 10 hạng mục tiêu chuẩn
+    categories_to_display = [
+        ("relationship_goal", "🎯 Mục tiêu mối quan hệ"),
+        ("core_value", "💎 Giá trị sống"),
+        ("communication_style", "🗣️ Phong cách giao tiếp"),
+        ("lifestyle", "🌿 Phong cách sống"),
+        ("social_preference", "🤝 Mức độ hướng ngoại/hướng nội"),
+        ("relationship_pace", "⏱️ Tốc độ phát triển mối quan hệ"),
+        ("personal_boundary", "🛡️ Ranh giới cá nhân"),
+        ("dealbreaker", "🚫 Điều không thể chấp nhận (Dealbreaker)"),
+    ]
+
+    for cat_key, cat_label in categories_to_display:
+        st.subheader(cat_label)
+        memories_in_cat = grouped.get(cat_key, [])
+
+        if not memories_in_cat:
+            st.caption("📌 Chưa có dữ liệu cho hạng mục này.")
+        else:
+            for mem in memories_in_cat:
+                c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+                with c1:
+                    st.write(f"• **{mem.human_readable_value}**")
+                    st.caption(f"Confidence: {int(mem.confidence*100)}% | Stability: {mem.stability}")
+                with c2:
+                    current_vis = mem.visibility
+                    new_vis = st.selectbox("Quyền:", ["MATCH_USE", "SHAREABLE", "PRIVATE_ONLY"], index=["MATCH_USE", "SHAREABLE", "PRIVATE_ONLY"].index(current_vis) if current_vis in ["MATCH_USE", "SHAREABLE", "PRIVATE_ONLY"] else 0, key=f"vis_sel_{mem.id}")
+                    if new_vis != current_vis:
+                        ProfileService.update_memory_visibility(db, st.session_state.user_id, mem.id, new_vis)
+                        st.toast(f"Đã cập nhật quyền sang {new_vis}")
+                        st.rerun()
+                with c3:
+                    if st.button("⚠️ Cupid hiểu sai", key=f"wrong_{mem.id}", use_container_width=True):
+                        ProfileService.flag_misunderstanding(db, st.session_state.user_id, mem.id)
+                        st.toast("Đã xóa thuộc tính do Cupid hiểu sai!")
+                        st.rerun()
+                with c4:
+                    if st.button("🗑️ Xóa", key=f"del_{mem.id}", use_container_width=True):
+                        ProfileService.delete_memory(db, st.session_state.user_id, mem.id)
+                        st.toast("Đã xóa thuộc tính!")
+                        st.rerun()
+        st.divider()
+
+    # 9. Những dữ liệu còn thiếu
+    st.subheader("🔍 Những dữ liệu còn thiếu (Missing Dimensions)")
+    if profile_data["missing_categories"]:
+        st.warning(f"Hồ sơ của bạn còn thiếu: {', '.join(profile_data['missing_labels'])}. Trò chuyện thêm với Cupid để ghép đôi chính xác hơn nhé!")
+    else:
+        st.success("🎉 Hồ sơ của bạn đã đầy đủ các thuộc tính cốt lõi để ghép đôi!")
+
+
+# ------------------------------------------------------------------------------
+# PAGE 4: 💘 TÌM NGƯỜI PHÙ HỢP (EXPLAINABLE RECOMMENDATIONS)
+# ------------------------------------------------------------------------------
+elif st.session_state.selected_nav == "💘 Tìm người phù hợp":
+    st.markdown("## 💘 Gợi ý đối tượng phù hợp (Top 3 Candidates)")
+    st.caption("Matching Engine so sánh hồ sơ của bạn với 25 ứng viên mẫu giả lập bằng công thức Weighted Scoring minh bạch (**không đọc raw chat**).")
+
+    # Filter điều chỉnh tiêu chí
+    with st.expander("⚙️ Điều chỉnh tiêu chí tìm kiếm (Filter Preferences)"):
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            pref_gender = st.selectbox("Bạn quan tâm giới tính:", ["female", "male", "all"])
+        with col_f2:
+            pref_city = st.selectbox("Thành phố ưu tiên:", ["Tất cả", "Hà Nội", "TP.HCM", "Đà Nẵng", "Huế", "Cần Thơ"])
+        with col_f3:
+            pref_goal = st.selectbox("Mục tiêu ưu tiên:", ["Bất kỳ", "long_term", "marriage", "casual_to_serious"])
+
+    if st.button("🚀 Tìm người phù hợp ngay", type="primary", use_container_width=True):
+        filters = {}
+        if pref_gender != "all":
+            filters["interested_in"] = [pref_gender]
+        if pref_city != "Tất cả":
+            filters["city"] = pref_city
+
+        with st.spinner("Matching Engine đang tính toán điểm tương thích..."):
+            match_req, top_matches = MatchingEngine.run_match(db, st.session_state.user_id, filters)
+            st.session_state.latest_matches = top_matches
+
+    if "latest_matches" in st.session_state and st.session_state.latest_matches:
+        top_matches = st.session_state.latest_matches
+        st.success(f"🎉 Hệ thống đã tìm thấy {len(top_matches)} đối tượng phù hợp nhất với bạn!")
+
+        for match_res, candidate, score_info in top_matches:
             st.markdown(f"""
-            <div class='cupid-card'>
-                <div style='display:flex; justify-content:space-between; align-items:center;'>
-                    <h3 style='margin:0;'>{prof['name']}, {prof['age']}t</h3>
-                    <span class='badge-mbti'>{prof['mbti']}</span>
+            <div class="cupid-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2>{candidate.display_name}, {candidate.age} tuổi</h2>
+                    <div class="score-badge">{score_info['total_score']}% Hợp</div>
                 </div>
-                <div style='margin-top:6px;'>
-                    <span class='badge-location'>📍 {prof['location']}</span>
-                </div>
-                <hr style='border-color: rgba(255,255,255,0.08); margin: 12px 0;'>
-                <p style='font-size:0.88rem;'>🎨 <b>Sở thích:</b> {', '.join(prof['hobbies'])}</p>
-                <p style='font-size:0.88rem;'>🌱 <b>Lối sống:</b> {prof['lifestyle']}</p>
-                <p style='font-size:0.88rem;'>💖 <b>Giá trị:</b> {prof['values']}</p>
-                <p style='font-size:0.88rem;'>⚠️ <b>Dealbreakers:</b> {', '.join(prof['dealbreakers'])}</p>
+                <p>📍 <b>{candidate.city}</b> | 💼 {candidate.occupation} | 🎯 Mục tiêu: {candidate.relationship_goal}</p>
+                <p><b>Lời giới thiệu:</b> <i>"{candidate.shareable_intro}"</i></p>
+                <p><span class="badge-confidence">Confidence Score: {int(score_info['confidence']*100)}%</span></p>
             </div>
             """, unsafe_allow_html=True)
 
-    # ==================== MAIN PANEL ====================
-    st.markdown("<h1 class='cupid-title'>Cupid Agent 💘 Trợ Lý Ghép Đôi Intelligent</h1>", unsafe_allow_html=True)
-    st.write("Bài Lab 3: Mô hình hội thoại ReAct Agent suy luận nhiều bước vs Chatbot Baseline thông thường.")
-
-    # Control Bar
-    col_mode, col_quick = st.columns([1, 1])
-    with col_mode:
-        mode = st.radio(
-            "Chọn chế độ AI:",
-            ["🤖 ReAct Agent (Gọi Tool & Suy Luận)", "💬 Chatbot Baseline (Kiến Thức Tĩnh)"],
-            horizontal=True
-        )
-
-    # Test cases quick onboard
-    test_cases = load_test_cases()
-    if test_cases:
-        st.markdown("##### 📌 Test Cases Mẫu từ `config/test_cases.json`:")
-        tc_cols = st.columns(min(4, len(test_cases)))
-        for i, tc in enumerate(test_cases[:4]):
-            label = f"Case {i+1}: {tc.get('category', 'Test').split('(')[0]}"
-            if tc_cols[i].button(label, key=f"btn_tc_{i}"):
-                st.session_state["query_input"] = tc.get("question", "")
-
-    # Input Box
-    default_q = st.session_state.get("query_input", "Hãy tra cứu hồ sơ Nam và Linh, sau đó tính % tương thích giúp tôi.")
-    user_query = st.text_input("💬 Nhập câu hỏi tự nhiên (Tiếng Việt):", value=default_q, placeholder="VD: So khớp Nam và Linh...")
-
-    if st.button("🚀 Phân Tích & Phản Hồi", type="primary", use_container_width=True):
-        if not user_query.strip():
-            st.warning("⚠️ Vui lòng nhập câu hỏi trước khi gửi!")
-        else:
-            # Check Input Guardrails
-            guard_err = validate_input(user_query)
-            if guard_err:
-                st.error(f"🛡️ **GUARDRAIL TRIGGERED:** {guard_err}")
-            else:
-                st.markdown("---")
-                if "Baseline" in mode:
-                    # ---------------- CHATBOT BASELINE ----------------
-                    st.subheader("💬 Phản hồi từ [CHATBOT BASELINE]")
-                    with st.spinner("Chatbot đang truy xuất câu trả lời..."):
-                        res = provider.generate(user_query, system_prompt=CHATBOT_BASELINE_PROMPT)
-                    st.markdown(f"""
-                    <div class='cupid-card'>
-                        <p style='white-space: pre-wrap;'>{res}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    st.caption("ℹ️ **Đánh giá Baseline:** Chatbot chỉ trả lời từ kiến thức tĩnh của LLM, không thể tra cứu thông tin thực tế trong MOCK_USER_PROFILES.")
+            # Phần giải thích tự nhiên từ LLM
+            with st.expander(f"💡 Xem giải thích chi tiết vì sao {candidate.display_name} phù hợp với bạn", expanded=True):
+                if match_res.explanation_text:
+                    st.markdown(match_res.explanation_text)
                 else:
-                    # ---------------- REACT AGENT ----------------
-                    st.subheader("🤖 Phản hồi từ [REACT AGENT]")
-                    
-                    # Executing ReAct Loop with Streamlit Status
-                    with st.status("🧠 Agent đang suy luận ReAct Loop...", expanded=True) as status_box:
-                        st.write("🔍 **Thought 1:** Xác định câu hỏi yêu cầu so sánh độ tương thích giữa người dùng Nam và Linh.")
-                        st.write("🛠️ **Action 1:** `get_user_profile('Nam')` & `get_user_profile('Linh')`")
-                        prof_nam = get_user_profile("Nam")
-                        prof_linh = get_user_profile("Linh")
-                        st.write(f"👁️ **Observation 1:** Đã tải thành công 2 hồ sơ.")
+                    with st.spinner("LLM đang tổng hợp câu giải thích tự nhiên..."):
+                        exp_text = ExplanationService.generate_explanation(db, st.session_state.user_id, match_res.id)
+                        st.markdown(exp_text)
 
-                        st.write("🔍 **Thought 2:** Tiến hành gọi tool `calculate_compatibility_score` để tính toán chỉ số tương thích.")
-                        st.write("🛠️ **Action 2:** `calculate_compatibility_score('Nam', 'Linh')`")
-                        score_res = calculate_compatibility_score("Nam", "Linh")
-                        st.write(f"👁️ **Observation 2:** {score_res.splitlines()[1] if 'Chỉ số' in score_res else score_res}")
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button(f"❤️ Quan tâm {candidate.display_name}", key=f"like_{candidate.id}", use_container_width=True):
+                    st.toast(f"Đã ghi nhận phản hồi 'Quan tâm' với {candidate.display_name}!")
+            with col_b2:
+                if st.button(f"❌ Không phù hợp", key=f"dislike_{candidate.id}", use_container_width=True):
+                    st.toast(f"Đã ghi nhận phản hồi 'Không phù hợp' với {candidate.display_name}.")
+            with col_b3:
+                if st.button(f"💬 Hỏi Cupid thêm về {candidate.display_name}", key=f"ask_{candidate.id}", use_container_width=True):
+                    st.session_state.selected_nav = "💬 Cupid Chat"
+                    st.rerun()
 
-                        st.write("🔍 **Thought 3:** Trích xuất Green Flags và Red Flags để phân tích rủi ro & điểm cộng.")
-                        st.write("🛠️ **Action 3:** `extract_red_green_flags('Nam', 'Linh')`")
-                        flags_res = extract_red_green_flags("Nam", "Linh")
-                        st.write(f"👁️ **Observation 3:** Đã trích xuất danh sách Green/Red Flags.")
-
-                        st.write("🔍 **Thought 4:** Tạo kịch bản mô phỏng hẹn hò đầu tiên.")
-                        st.write("🛠️ **Action 4:** `simulate_date_chat('Nam', 'Linh')`")
-                        chat_res = simulate_date_chat("Nam", "Linh")
-
-                        status_box.update(label="✅ ReAct Agent đã hoàn tất suy luận thành công!", state="complete", expanded=False)
-
-                    # ================= DASHBOARD DISPLAY =================
-                    st.markdown("### 🎯 Kết Quả Phân Tích & So Khớp Chi Tiết")
-
-                    row1_col1, row1_col2 = st.columns([1, 1])
-
-                    with row1_col1:
-                        st.markdown("""
-                        <div class='cupid-card' style='text-align: center;'>
-                            <h4 style='margin-bottom:15px;'>💘 Chỉ Số Tương Thích Tổng Quan</h4>
-                            <div class='score-circle' style='--score: 87;'>
-                                <span class='score-number'>87%</span>
-                            </div>
-                            <h4 style='color:#FF3366; margin-top:5px;'>Cặp Đôi Vàng ENFP × INFJ</h4>
-                            <p style='font-size:0.85rem; color:#A0AEC0;'>Bù trừ tính cách hoàn hảo giữa hướng ngoại & hướng nội</p>
-                            <hr style='border-color: rgba(255,255,255,0.08); margin: 12px 0;'>
-                            <div style='text-align:left; font-size:0.88rem;'>
-                                <p>🧩 <b>Độ hợp MBTI:</b> 95% (Rất hợp)</p>
-                                <p>🎨 <b>Sở thích chung:</b> Mèo, Cà phê</p>
-                                <p>📍 <b>Khoảng cách địa lý:</b> Cùng khu vực (Hà Nội)</p>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    with row1_col2:
-                        st.markdown("""
-                        <div class='cupid-card'>
-                            <h4>🟢 Green Flags (Điểm Cộng)</h4>
-                            <div class='flag-green'>• Cùng sở thích: Mèo, Cà phê</div>
-                            <div class='flag-green'>• Cặp đôi MBTI 'vàng trong làng ghép đôi' (ENFP x INFJ)</div>
-                            <div class='flag-green'>• Cùng ở Hà Nội, dễ dàng gặp mặt trực tiếp</div>
-                            
-                            <h4 style='margin-top:20px;'>🚩 Red Flags (Cảnh Báo)</h4>
-                            <div class='flag-red'>• Lối sống đối lập: Nam (Hướng ngoại, thức khuya) vs Linh (Hướng nội, dậy sớm)</div>
-                            <div class='flag-red'>• Lệch nhịp sinh học: Một người thích phiêu lưu ồn ào, một người thích yên tĩnh</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    # Date Chat Simulation Component
-                    st.markdown("### 🎭 Mô Phỏng Kịch Bản Hẹn Hò (Date Chat Simulator)")
-                    st.markdown("""
-                    <div class='cupid-card'>
-                        <p style='color:#FF6B8B; font-weight:600;'>📍 Gợi ý địa điểm: Quán cà phê yên tĩnh tại Hà Nội</p>
-                        <p style='color:#38BDF8; font-weight:600;'>💡 Chủ đề Icebreaker đề xuất: Thảo luận về sở thích 'Mèo & Cà phê'</p>
-                        <hr style='border-color: rgba(255,255,255,0.08); margin: 12px 0;'>
-                        
-                        <div class='chat-bubble-a'>
-                            <b>Nam:</b> "Chào Linh, mình thấy bạn cũng rất thích mèo và cà phê yên tĩnh. Bạn hay ghé quán nào ở Hà Nội thế?"
-                        </div>
-                        <div class='chat-bubble-b'>
-                            <b>Linh:</b> "Chào Nam! Mình hay ghé mấy quán nhỏ trong ngõ vào cuối tuần. Thật tình cờ khi bạn cũng thích mèo đấy!"
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+            st.divider()
 
 
-if __name__ == "__main__":
-    if is_streamlit_running():
-        run_streamlit_app()
+# ------------------------------------------------------------------------------
+# PAGE 5: 🛡️ QUYỀN RIÊNG TƯ & SECURITY AUDIT
+# ------------------------------------------------------------------------------
+elif st.session_state.selected_nav == "🛡️ Quyền riêng tư & Audit":
+    st.markdown("## 🛡️ Quyền riêng tư & Security Audit Logs")
+    st.caption("Cupid cam kết bảo vệ dữ liệu cá nhân tuyệt đối. **LLM không bao giờ có quyền truy cập trực tiếp vào DB** và mọi hành vi đều được ghi lại nhật ký audit.")
+
+    st.subheader("📜 Nhật ký truy vết bảo mật (Audit Logs)")
+    logs = db.query(AuditLog).filter(AuditLog.actor_id == st.session_state.user_id).order_by(AuditLog.timestamp.desc()).limit(20).all()
+
+    if not logs:
+        st.info("Chưa có nhật ký truy vết nào.")
     else:
-        print("==================================================")
-        print("🏫 ĐẠI HỌC VINUNI - BÀI LAB 3: CHATBOT VS REACT AGENT (CUPID AGENT)")
-        print("==================================================")
-        print("💡 Gợi ý: Hãy chạy `streamlit run src/app.py` để mở giao diện Web Streamlit Glassmorphic!")
-        print("==================================================")
-        
-        provider = get_llm_provider()
-        model_name = getattr(provider, "model_name", "Offline Mock Mode")
-        print(f"🔌 LLM Provider đang hoạt động: {provider.__class__.__name__} (Model: {model_name})")
-        
-        tests = load_test_cases()
-        print(f"✅ Đã tải thành công {len(tests)} Test Cases từ config/test_cases.json\n")
-        
-        if tests:
-            print("--- 📌 TEST CASE 3: CHẠY TRÊN CHATBOT BASELINE ---")
-            run_baseline_chatbot(tests[2]["question"], provider)
-            
-            print("\n--------------------------------------------------")
-            print("--- 📌 TEST CASE 3: CHẠY TRÊN REACT AGENT ---")
-            run_react_agent(tests[2]["question"], provider)
+        for log in logs:
+            st.write(f"• `[{log.timestamp.strftime('%H:%M:%S %d/%m/%Y')}]` **Action:** `{log.action}` | **Decision:** `{log.decision}` | Details: {log.details or 'N/A'}")
 
-            if len(tests) > 4:
-                print("\n--------------------------------------------------")
-                print("--- 📌 TEST CASE EDGE CASE (GUARDRAIL): CHẠY TRÊN REACT AGENT ---")
-                run_react_agent(tests[4]["question"], provider)
+    st.divider()
+    st.subheader("🧹 Quản lý dữ liệu cá nhân")
+    if st.button("🗑️ Xóa toàn bộ dữ liệu & Reset hồ sơ của tôi", type="secondary"):
+        db.query(ApprovedMemory).filter(ApprovedMemory.owner_id == st.session_state.user_id).delete()
+        db.query(MemoryCandidate).filter(MemoryCandidate.user_id == st.session_state.user_id).delete()
+        db.commit()
+        st.success("Đã xóa toàn bộ dữ liệu hồ sơ cá nhân thành công!")
+        st.rerun()
+
+
+# ------------------------------------------------------------------------------
+# PAGE 6: 🔐 ĐĂNG NHẬP / ĐĂNG KÝ (AUTH PANEL)
+# ------------------------------------------------------------------------------
+elif st.session_state.selected_nav == "🔐 Đăng nhập / Đăng ký":
+    st.markdown("## 🔐 Đăng nhập & Đăng ký Tài khoản")
+    st.caption("Mỗi người dùng có một không gian dữ liệu tách biệt tuyệt đối.")
+
+    tab_login, tab_register = st.tabs(["Đăng nhập", "Đăng ký tài khoản mới"])
+
+    with tab_login:
+        with st.form("login_form"):
+            l_email = st.text_input("Email:")
+            l_pwd = st.text_input("Mật khẩu:", type="password")
+            submit_login = st.form_submit_button("Đăng nhập")
+
+            if submit_login:
+                ok, res = AuthService.authenticate_user(db, l_email, l_pwd)
+                if ok:
+                    st.session_state.user_id = res.id
+                    st.session_state.user_email = res.email
+                    st.session_state.display_name = res.display_name
+                    st.success(f"Đăng nhập thành công! Chào mừng {res.display_name}")
+                    st.session_state.selected_nav = "💬 Cupid Chat"
+                    st.rerun()
+                else:
+                    st.error(res)
+
+    with tab_register:
+        with st.form("register_form"):
+            r_name = st.text_input("Tên hiển thị:")
+            r_email = st.text_input("Email đăng ký:")
+            r_pwd = st.text_input("Mật khẩu:", type="password")
+            submit_reg = st.form_submit_button("Tạo tài khoản")
+
+            if submit_reg:
+                ok, res = AuthService.register_user(db, r_email, r_pwd, r_name)
+                if ok:
+                    st.session_state.user_id = res.id
+                    st.session_state.user_email = res.email
+                    st.session_state.display_name = res.display_name
+                    st.success(f"Tạo tài khoản thành công! Bạn đã sẵn sàng trải nghiệm.")
+                    st.session_state.selected_nav = "💬 Cupid Chat"
+                    st.rerun()
+                else:
+                    st.error(res)
+
+
+db.close()

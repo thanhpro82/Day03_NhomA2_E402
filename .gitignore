@@ -5,6 +5,8 @@ __pycache__/
 .venv/
 env/
 venv/
-
+*.db
+cupid_agent.db
+.pytest_cache/
 
 .agents

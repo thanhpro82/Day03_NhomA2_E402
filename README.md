@@ -1,73 +1,149 @@
-# 🏫 BÀI LAB 3: CHATBOT VS REACT AGENT - TỪ Ý TƯỞNG ĐẾN THỰC THI
+# 💘 CUPID AGENT — TRỢ LÝ TRÒ CHUYỆN, HIỂU NGƯỜI DÙNG & GỢI Ý ĐỐI TƯỢNG PHÙ HỢP
+
+> **MVP Kiểm chứng giả thuyết**: *Người dùng có sẵn sàng trò chuyện tự nhiên với một AI Companion để AI thấu hiểu dần dần và đưa ra những gợi ý hẹn hò có thể giải thích hay không?*
 
 ---
 
-### 💡 1. LỜI NÓI ĐẦU & NỀN TẢNG LÝ THUYẾT (4 CẤP ĐỘ AI HỘI THOẠI)
+## 🌟 Điểm nổi bật của Sản phẩm
 
-Bài Lab giúp bạn hiểu rõ sự tiến hóa qua 4 cấp độ của hệ thống AI:
-
-| Cấp độ | Loại hệ thống | Đặc điểm chính | Sự xuất hiện trong Bài Lab |
-| :---: | :--- | :--- | :--- |
-| **Cấp 1** | **Rule-Based Bot** | Khớp từ khóa if/else cố định, không có LLM | *Minh họa lịch sử* |
-| **Cấp 2** | **LLM Chatbot** | Dùng LLM sinh text mượt, nhưng không gọi được Tool | **Chatbot Baseline** (Phần thực hành 1) |
-| **Cấp 3** | **Reactive Agent** | Suy luận `Thought -> Action -> Observation` & gọi Tool | **ReAct Agent Loop** (Trọng tâm Bài Lab) |
-| **Cấp 4** | **Autonomous Agent** | Tự rã mục tiêu (Planning), tự đánh giá & có Memory | 🎁 **Phần Bonus Nâng cao (+10%)** |
-
-* 🤖 **Chatbot thông thường (Cấp 2)**: Giống như một **chuyên gia lý thuyết** — chỉ trả lời dựa trên kiến thức tĩnh có sẵn trong LLM, không thể tra cứu số liệu thực tế hay tự thực hiện thao tác.
-* 🧠 **ReAct Agent (Cấp 3)**: Giống như một **trợ lý thực hành** — vừa biết suy nghĩ (**Thought**), vừa biết chủ động dùng công cụ (**Action**) như phần mềm tra cứu/tính toán, và quan sát kết quả (**Observation**) để giải quyết các bài toán thực tế.
+1. **Cupid Agent Companion Chat**: Trò chuyện ấm áp, lắng nghe tự nhiên, không phán xét, gợi mở 1 câu hỏi/lượt.
+2. **Structured Memory Extraction**: Trích xuất các thuộc tính cá nhân (sở thích, ranh giới, giá trị sống, dealbreaker,...) chuẩn JSON Schema.
+3. **Human-in-the-Loop Consent Control**: Người dùng toàn quyền kiểm soát từng memory với 4 cấp độ:
+   - `PRIVATE_ONLY`: Chỉ dùng khi Cupid chat với chính bạn.
+   - `MATCH_USE`: Dùng tính điểm tương thích, không hiện nguyên văn.
+   - `SHAREABLE`: Dùng tính điểm tương thích & xuất hiện ở phần giới thiệu.
+   - `DO_NOT_SAVE`: Loại bỏ hoàn toàn, không lưu.
+4. **Transparent Relationship Profile**: Trang *"Cupid hiểu gì về bạn"* minh bạch 10 nhóm thuộc tính, hỗ trợ sửa, xóa, báo Cupid hiểu sai.
+5. **Rule-based Weighted Matching Engine**: Tính điểm tương thích chuẩn với 25 ứng viên mẫu giả lập (**tuyệt đối không đọc raw chat**).
+6. **Explainable Recommendations**: LLM diễn giải lý do phù hợp, điểm tương đồng, điểm khác biệt và câu hỏi gợi mở trò chuyện.
+7. **Privacy & Security First**: Tách biệt dữ liệu người dùng tuyệt đối (`WHERE owner_id = authenticated_user_id`), phòng chống Prompt Injection & System Prompt Extraction, lưu nhật ký Audit bảo mật.
+8. **100% Offline Smart Mock Mode**: Chạy demo full-flow mượt mà không cần API Key.
 
 ---
 
-### 📂 2. CẤU TRÚC THƯ MỤC DỰ ÁN
+## 🛠️ Hướng dẫn Cài đặt & Khởi chạy
+
+### Cách 1: Chạy trực tiếp bằng Python Virtualenv
+
+```bash
+# 1. Khởi tạo môi trường ảo Python & Cài đặt thư viện
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Khởi tạo Database & Seed 25 Candidate Mẫu
+PYTHONPATH=. python3 src/database/seed.py
+
+# 3. Khởi chạy Web UI (Streamlit Dark Glassmorphism Theme)
+PYTHONPATH=. streamlit run src/app.py
+```
+
+Ứng dụng sẽ tự động mở tại trình duyệt: `http://localhost:8501`
+
+---
+
+### Cách 2: Chạy bằng Docker Compose
+
+```bash
+docker compose up --build
+```
+
+---
+
+### Cách 3: Sử dụng Makefile
+
+```bash
+make dev      # Chạy ứng dụng Streamlit dev server
+make test     # Chạy bộ unit, integration & security tests
+make seed     # Khởi tạo 25 ứng viên mẫu
+make reset    # Reset và tạo lại database mẫu sạch
+```
+
+---
+
+## ⚙️ Cấu hình API Key (Tùy chọn)
+
+Sao chép file `.env.example` thành `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Chỉnh sửa file `.env`:
+- `LLM_PROVIDER=auto` (hoặc `openai` / `gemini` / `mock`)
+- `OPENAI_API_KEY=sk-...` (nếu dùng OpenAI)
+- `GEMINI_API_KEY=...` (nếu dùng Gemini)
+
+*Ghi chú: Nếu chưa có API Key, hệ thống tự động bật **Smart Offline MockLLMProvider** giúp bạn demo trọn vẹn toàn bộ tính năng mà không có bất kỳ lỗi nào.*
+
+---
+
+## 🎬 Hướng dẫn Test Luồng Demo 10 Bước (Demo Flow)
+
+1. Mở ứng dụng tại `http://localhost:8501`. Mặc định hệ thống tự đăng nhập tài khoản **Người dùng Demo** (`demo@cupid.ai`).
+2. Vào tab **💬 Cupid Chat**, gửi đoạn văn tâm sự:
+   > *"Mình khá hướng nội và thích dành cuối tuần ở quán cà phê hoặc đọc sách. Mình muốn một mối quan hệ nghiêm túc nhưng thích tìm hiểu từ từ. Mình không thích người quá kiểm soát."*
+3. Cupid sẽ phản hồi tự nhiên, ấm áp và hỏi thêm 1 câu mở.
+4. Bấm nút **🧠 Trích xuất Memory từ cuộc trò chuyện**.
+5. Chuyển sang tab **🧠 Duyệt Memory**: Bạn sẽ thấy danh sách các memory candidate được trích xuất (hướng nội, đọc sách & cà phê, mối quan hệ nghiêm túc, tìm hiểu từ từ, dị ứng kiểm soát). Gán quyền `MATCH_USE` hoặc `SHAREABLE` cho từng thuộc tính.
+6. Chuyển sang tab **📋 Cupid hiểu gì về bạn**: Kiểm tra profile của bạn đã được cập nhật đầy đủ các nhóm thuộc tính.
+7. Chuyển sang tab **💘 Tìm người phù hợp**: Nhấn **🚀 Tìm người phù hợp ngay**.
+8. Matching Engine so sánh và trả về Top 3 ứng viên mẫu phù hợp nhất (VD: Minh, Linh,...).
+9. Mở phần **💡 Xem giải thích chi tiết**: Đọc giải thích tự nhiên từ LLM (lý do hợp, điểm giống, điểm khác, câu hỏi gợi mở).
+10. Bấm nút **❤️ Quan tâm** hoặc **❌ Không phù hợp** để gửi feedback.
+
+---
+
+## 🧪 Hướng dẫn Chạy Kiểm thử (Testing Suite)
+
+Hệ thống bao gồm bộ kiểm thử toàn diện cho Unit, Integration và Security:
+
+```bash
+# Chạy bộ test đầy đủ
+PYTHONPATH=. .venv/bin/pytest src/tests/ -v
+```
+
+Các bài test bao gồm:
+- `src/tests/unit/test_matching_engine.py`: Test weighted scoring, hard constraints, dealbreaker penalty, privacy visibility isolation.
+- `src/tests/integration/test_user_flow.py`: Test toàn bộ luồng người dùng khép kín từ Đăng ký -> Chat -> Memory -> Consent -> Profile -> Match -> Feedback.
+- `src/tests/security/test_privacy_guard.py`: Test chống Prompt Injection, System Prompt Extraction, Stalking, Doxxing, và cách ly dữ liệu giữa User A & User B.
+
+---
+
+## 📁 Cấu trúc Thư mục Dự án
 
 ```text
-📁 Day-3-Lab-Chatbot-vs-react-agent-E402/
-├── 📄 README.md                 <-- 📘 Tổng quan bài Lab & Thang điểm
-├── 📄 .env.example              <-- 🔑 File mẫu API Key
-├── 📄 requirements.txt          <-- 📦 Thư viện cần cài đặt
-│
-├── 📁 config/                   <-- 🛠️ CẤU HÌNH & DỮ LIỆU
-│   └── 📄 test_cases.json       <-- 🟢 [Role 1] Bộ đề 5 Test Cases thử thách AI
-│
-├── 📁 src/                      <-- 💻 MÃ NGUỒN PYTHON (BOILERPLATE)
-│   ├── 📄 tools.py              <-- 🛠️ [Role 2] Khai báo các công cụ (Tools)
-│   ├── 📄 prompts.py            <-- 🧠 [Role 3] ReAct System Prompt & Guardrails
-│   └── 📄 app.py                <-- 🚀 [Role 4] Core App ghép nối & chạy ReAct Loop
-│
-└── 📁 docs/                     <-- 📚 TÀI LIỆU HƯỚNG DẪN & BÁO CÁO
-    ├── 📄 CODELAB.md            <-- 🎓 [LMS Format] Hướng dẫn thực hành từng bước Codelab
-    ├── 📄 PHAN_CONG_CONG_VIEC.md <-- 📋 [BẮT ĐẦU TẠI ĐÂY] Sổ tay thực hành & Checklist 5 Roles
-    ├── 📄 DANH_SACH_DE_TAI.md    <-- 💡 Danh sách 10 chủ đề gợi ý
-    └── 📄 trace_eval.md          <-- 📊 [Role 5] Báo cáo Log Trace & Đánh giá Agentic Fit
+Day03_NhomA2_E402/
+├── .env.example
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile
+├── README.md
+├── requirements.txt
+├── config/
+│   └── test_cases.json
+├── docs/
+│   ├── architecture-documentation.md
+│   └── implementation-plan.md
+├── src/
+│   ├── app.py                     # Streamlit Frontend Web App
+│   ├── config.py                  # Environment & App Settings & Prompts
+│   ├── database/
+│   │   ├── connection.py          # SQLAlchemy Connection & Session
+│   │   ├── models.py              # 11 ORM Data Models
+│   │   └── seed.py                # Script khởi tạo 25 Candidates hư cấu & Demo User
+│   ├── services/
+│   │   ├── llm_provider.py        # LLM Adapter (OpenAI/Gemini/MockProvider)
+│   │   ├── conversation_service.py # Quản lý hội thoại & context
+│   │   ├── memory_service.py      # Trích xuất memory & Consent
+│   │   ├── profile_service.py     # Quản lý Relationship Profile CRUD
+│   │   ├── matching_engine.py     # Rule-based Weighted Scoring Engine
+│   │   ├── explanation_service.py # Match Explanation Service
+│   │   ├── safety_service.py      # Moderation & Privacy Filter
+│   │   ├── audit_service.py       # Security Audit Logging
+│   │   └── auth_service.py        # Authentication & Isolation
+│   └── tests/
+│       ├── unit/
+│       ├── integration/
+│       └── security/
 ```
-
----
-
-### ⏱️ 3. LỘ TRÌNH THỰC HÀNH (4 MỐC / 150 PHÚT)
-
-```mermaid
-timeline
-    title ⏱️ KỊCH BẢN THỰC HÀNH LAB 3 (Tổng thời lượng: 150 phút)
-    Mốc 1 (20 phút) : Định hình & Đánh giá Agentic Fit : Chọn bài toán & Lập bảng chấm điểm Scoring Matrix
-    Mốc 2 (30 phút) : Baseline Chatbot & Khai báo Tool : Dựng Chatbot gốc & Viết Tool Specs + 5 Test Cases
-    Mốc 3 (60 phút) : ReAct Loop & Safeguards : Viết Prompt, lắp Agent, cài Phanh Guardrails & Chạy Test
-    Mốc 4 (40 phút) : Tương tác liên nhóm & Hybrid Pattern : Cross-Audit (Tấn công/Phòng thủ) & Vẽ Flowchart
-```
-
----
-
-### 💯 4. CƠ CHẾ CHẤM ĐIỂM  (SCORING RUBRIC)
-
-| Tiêu chí                                |  Trọng số  | Mô tả chi tiết                                                                                                             | Bằng chứng kiểm tra (Artifacts)                                        |
-| :---------------------------------------- | :-----------: | :---------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
-| **1. Agentic Fit & Test Design**    | **20%** | Phân tích đúng 4 tiêu chí Agentic Fit cho chủ đề tự chọn. Bộ test cases đủ góc cạnh (đơn giản, multi-step, edge cases). | Bảng chấm điểm (`docs/trace_eval.md`) + `config/test_cases.json`. |
-| **2. ReAct Implementation & Tools** | **30%** | Tool description rõ ràng. Vòng lặp ReAct chạy đúng chuẩn `Thought -> Action -> Observation`.                         | Code trong `src/tools.py` + `src/app.py`.                              |
-| **3. Guardrails & Observability**   | **20%** | Bắt được lỗi loop, có max iterations (Guardrail). Trích xuất được ít nhất 1 Trace log hoàn chỉnh.                     | File `src/prompts.py` + Log trong `docs/trace_eval.md`.                |
-| **4. Inter-group Attack & Defense** | **20%** | Phản biện tốt khi gọi ngẫu nhiên hoặc cử 1 bạn đi chấm chéo (+10đ). Agent chống đỡ tốt / fallback chuẩn (+10đ).        | Biên bản Cross-Audit / Trả lời phản biện.                             |
-| **5. Hybrid Decision Flowchart**    | **10%** | Sơ đồ thể hiện rõ khi nào đi Chatbot path, khi nào đi ReAct Agent path.                                             | Sơ đồ Flowchart (`docs/hybrid_flowchart.mermaid`).                   |
-| 🎁 **BONUS: Autonomous Agent**     | **+10%**| Thử nghiệm tính năng Planning (tự chia nhỏ mục tiêu) hoặc Memory cho Agent (Cấp 4).                                  | Demo code trong `src/app.py` hoặc giải trình trong report.           |
-
----
-
-> 🚀 **BẮT ĐẦU LÀM BÀI**:
-> Vui lòng mở sổ tay thực hành 👉 **[PHAN_CONG_CONG_VIEC.md](file:///c:/Users/Admin/Documents/VinUni/LabCoachVin/LabKeyCoach/Day-3-Lab-Chatbot-vs-react-agent-E402/docs/PHAN_CONG_CONG_VIEC.md)** để xem phân vai và checklist công việc cụ thể cho từng thành viên!

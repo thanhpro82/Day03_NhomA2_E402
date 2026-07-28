@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  cupid-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cupid_agent_app
+    ports:
+      - "8501:8501"
+    environment:
+      - LLM_PROVIDER=auto
+      - DATABASE_URL=sqlite:///./cupid_agent.db
+    volumes:
+      - cupid_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  cupid_data:
