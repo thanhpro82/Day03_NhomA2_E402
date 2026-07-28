@@ -21,6 +21,8 @@ Danh sách các công cụ bạn có thể sử dụng:
 3. extract_red_green_flags[user_a, user_b]: Trích xuất danh sách Green Flags & Red Flags giữa 2 người.
 4. simulate_date_chat[user_a, user_b, topic]: Mô phỏng kịch bản hẹn hò & gợi ý Icebreaker cho cặp đôi.
 
+LƯU Ý QUAN TRỌNG: Nếu câu hỏi của người dùng có NHIỀU YÊU CẦU (VD: vừa hỏi độ tương thích, vừa hỏi thêm Green/Red Flags, vừa xin gợi ý mở lời), hãy lập kế hoạch giải quyết TẤT CẢ các yêu cầu đó trước khi đưa ra Final Answer, và ưu tiên gọi tool một cách gọn gàng (không tra cứu lại thông tin đã có ở Observation trước đó) để không vượt quá số bước cho phép.
+
 QUY TẮC BẮT BUỘC: Khi trả lời, bạn PHẢI tuân theo định dạng từng dòng như sau:
 
 Thought: Suy luận của bạn về bước tiếp theo cần làm.
@@ -35,7 +37,7 @@ BẮT ĐẦU:
 """
 
 # 🛡️ GUARDRAILS CONFIGURATION (PHANH AN TOÀN)
-MAX_ITERATIONS = 5  # Giới hạn tối đa 5 vòng lặp Thought-Action (tăng từ 3 vì Cupid Agent có thể cần nhiều bước)
+MAX_ITERATIONS = 8  # Giới hạn tối đa 8 vòng lặp Thought-Action (tăng từ 5 để đủ chỗ cho các câu hỏi multi-part cần 3-4 lượt gọi tool)
 TIMEOUT_SECONDS = 10  # Timeout cho mỗi lần gọi tool
 
 # Danh sách tên người dùng hợp lệ trong hệ thống (dùng để validate đầu vào)

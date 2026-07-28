@@ -63,7 +63,7 @@ def parse_action(text: str):
     """
     Trích xuất tên tool và tham số từ chuỗi 'Action: tool_name[arg1, arg2]'
     """
-    match = re.search(r"Action:\s*([a_zA_Z0-9_]+)\[(.*?)\]", text, re.IGNORECASE)
+    match = re.search(r"Action:\s*([a-zA-Z0-9_]+)\[(.*?)\]", text, re.IGNORECASE)
     if match:
         tool_name = match.group(1).strip()
         raw_args = match.group(2).strip()
@@ -104,7 +104,7 @@ def run_react_agent(user_query: str, provider):
 
         if "Final Answer:" in response:
             print("\n✅ ReAct Agent đã hoàn thành nhiệm vụ.")
-            break
+            return
 
         tool_name, args = parse_action(response)
         if tool_name:
