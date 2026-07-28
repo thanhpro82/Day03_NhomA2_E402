@@ -145,12 +145,28 @@ def get_llm_provider(provider_name: str = None) -> BaseLLMProvider:
     name = (provider_name or os.getenv("LLM_PROVIDER") or "mock").lower().strip()
     
     if name == "gemini":
+        key = os.getenv("GEMINI_API_KEY")
+        if not key or key == "your_gemini_api_key_here":
+            print("⚠️ Chưa điền GEMINI_API_KEY thực tế vào .env -> Tự động chuyển sang chế độ Offline Mock để chạy demo.")
+            return MockProvider()
         return GeminiProvider()
     elif name == "openai":
+        key = os.getenv("OPENAI_API_KEY")
+        if not key or key == "your_openai_api_key_here":
+            print("⚠️ Chưa điền OPENAI_API_KEY thực tế vào .env -> Tự động chuyển sang chế độ Offline Mock để chạy demo.")
+            return MockProvider()
         return OpenAIProvider()
     elif name == "anthropic":
+        key = os.getenv("ANTHROPIC_API_KEY")
+        if not key or key == "your_anthropic_api_key_here":
+            print("⚠️ Chưa điền ANTHROPIC_API_KEY thực tế vào .env -> Tự động chuyển sang chế độ Offline Mock để chạy demo.")
+            return MockProvider()
         return AnthropicProvider()
     elif name == "openrouter":
+        key = os.getenv("OPENROUTER_API_KEY")
+        if not key or key == "your_openrouter_api_key_here":
+            print("⚠️ Chưa điền OPENROUTER_API_KEY thực tế vào .env -> Tự động chuyển sang chế độ Offline Mock để chạy demo.")
+            return MockProvider()
         return OpenRouterProvider()
     else:
         return MockProvider()
